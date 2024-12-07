@@ -1,0 +1,6 @@
+-r requirements.txt
+pre-commit
+autoflake
+pyupgrade
+pyinstaller
+build
