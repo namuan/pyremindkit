@@ -4,7 +4,6 @@ from pyremindkit import Priority
 from pyremindkit import RemindKit
 
 remind = RemindKit()
-remind.authenticate()
 
 # Get the default calendar
 default_calendar = remind.calendars.get_default()

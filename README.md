@@ -22,7 +22,6 @@ from datetime import datetime
 from pyremindkit import RemindKit, Priority
 
 remind = RemindKit()
-remind.authenticate()
 
 # Get the default calendar
 default_calendar = remind.calendars.get_default()

@@ -227,10 +227,6 @@ class RemindKit:
         self._on_reminder_created_callbacks = []
         self._on_reminder_completed_callbacks = []
 
-    def authenticate(self) -> None:
-        """Mark the client as authenticated"""
-        self._is_authenticated = True
-
     def create_reminder(self, **kwargs) -> Reminder:
         """Creates a new reminder (in the default calendar if not specified)."""
         calendar_id = kwargs.pop("calendar_id", None)
