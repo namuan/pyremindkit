@@ -1,38 +1,49 @@
-from typing import Dict
-from typing import List
+from datetime import datetime
 
-from pyremindkit import Reminder
-from pyremindkit import RemindersAPI
+from pyremindkit import Priority
+from pyremindkit import RemindKit
 
-# Create API instance
-api = RemindersAPI()
+remind = RemindKit()
+remind.authenticate()
 
+# Get the default calendar
+default_calendar = remind.calendars.get_default()
+print(f"Default calendar: {default_calendar.name}")
 
-# Usage example:
-def print_reminders(reminders_dict: Dict[str, List[Reminder]]):
-    for calendar_name, reminders in reminders_dict.items():
-        print(f"\n=== {calendar_name} Calendar ===")
-        for reminder in reminders:
-            print(f"Title: {reminder.title}")
-            print(f"ID: {reminder.id}")
-            if reminder.due_date:
-                print(f"Due Date: {reminder.due_date}")
-            if reminder.notes:
-                print(f"Notes: {reminder.notes}")
-            if reminder.url:
-                print(f"URL: {reminder.url}")
-            print("---")
+# List reminders due today or in the past that are incomplete
+print("Incomplete reminders due today or in the past:")
+for r in remind.get_reminders(due_before=datetime.now(), is_completed=False):
+    print(f"- {r.title} (ID: {r.id}, Due: {r.due_date})")
 
+# Create a new reminder
+new_reminder = remind.create_reminder(
+    title="Buy Milk",
+    due_date=datetime.now(),
+    notes="Get some oat milk too!",
+    priority=Priority.HIGH,
+    calendar_id=default_calendar.id,
+)
+print(f"Created reminder: {new_reminder.title} (ID: {new_reminder.id})")
 
-# Get all incomplete reminders
-all_reminders = api.get_incomplete_reminders()
-print_reminders(all_reminders)
+# Update the reminder's title
+updated_reminder = remind.update_reminder(
+    new_reminder.id,
+    title="Buy Almond Milk Instead",
+    notes="Changed my mind, get almond milk!",
+)
+print(f"Updated reminder title to: {updated_reminder.title}")
+print(f"Updated reminder notes to: {updated_reminder.notes}")
 
-# Example: Start work on the first reminder from any calendar
-for calendar_reminders in all_reminders.values():
-    if calendar_reminders:
-        first_reminder = calendar_reminders[1]
-        updated_reminder = api.pause_work(first_reminder)
-        print("\nUpdated reminder:")
-        print(f"Title: {updated_reminder.title}")
-        break
+# Get a reminder by ID
+retrieved_reminder = remind.get_reminder_by_id(new_reminder.id)
+print(f"Retrieved reminder: {retrieved_reminder.title}")
+
+remind.delete_reminder(new_reminder.id)
+print(f"Deleted reminder: {new_reminder.title}")
+
+# Verify the reminder was deleted
+try:
+    remind.get_reminder_by_id(new_reminder.id)
+    print("Error: Reminder still exists!")
+except ValueError:
+    print("Verified: Reminder was successfully deleted")

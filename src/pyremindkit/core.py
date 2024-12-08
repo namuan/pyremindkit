@@ -1,16 +1,32 @@
-from collections import defaultdict
+from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum
 from threading import Event
-from typing import Dict
-from typing import List
+from typing import Callable
+from typing import Generator
 from typing import NamedTuple
 from typing import Optional
 
 import objc
 from EventKit import EKEntityTypeReminder
 from EventKit import EKEventStore
+from EventKit import EKReminder
 from Foundation import NSCalendar
+from Foundation import NSCalendarUnitDay
+from Foundation import NSCalendarUnitHour
+from Foundation import NSCalendarUnitMinute
+from Foundation import NSCalendarUnitMonth
+from Foundation import NSCalendarUnitSecond
+from Foundation import NSCalendarUnitYear
 from Foundation import NSDate
+
+
+# --- Data Classes ---
+class Priority(Enum):
+    NONE = 0
+    LOW = 1
+    MEDIUM = 2
+    HIGH = 3
 
 
 class Reminder(NamedTuple):
@@ -22,208 +38,367 @@ class Reminder(NamedTuple):
     url: Optional[str]
 
 
-class RemindersAPI:
-    def __init__(self):
-        self.event_store = self._grant_permission()
+@dataclass
+class Calendar:
+    id: str
+    name: str
+    owner: str  # Placeholder, as this isn't directly accessible via EventKit
+    color: str
+    is_default: bool = False
+    _event_store: EKEventStore = None  # Internal reference to the event store
 
-    def _grant_permission(self) -> EKEventStore:
-        event_store = EKEventStore.alloc().init()
-        done = Event()
-        result = {}
+    def get_reminders(
+        self,
+        due_after: Optional[datetime] = None,
+        due_before: Optional[datetime] = None,
+        is_completed: Optional[bool] = None,
+        priority: Optional[Priority] = None,
+    ) -> Generator[Reminder, None, None]:
+        """Fetches reminders from the calendar based on filters."""
 
-        def completion_handler(granted: bool, error: objc.objc_object) -> None:
-            result["granted"] = granted
-            result["error"] = error
-            done.set()
-
-        event_store.requestFullAccessToRemindersWithCompletion_(completion_handler)
-        done.wait(timeout=60)
-        if not result.get("granted"):
-            raise PermissionError("No access to reminder")
-
-        return event_store
-
-    def _convert_reminder(self, reminder) -> Reminder:
-        # Convert NSDate to datetime if exists
-        due_date = None
-        if reminder.dueDateComponents():
-            ns_date = reminder.dueDateComponents().date()
-            if ns_date:
-                due_date = datetime.fromtimestamp(ns_date.timeIntervalSince1970())
-
-        return Reminder(
-            id=reminder.calendarItemIdentifier(),  # Store the reminder's unique identifier
-            title=reminder.title(),
-            due_date=due_date,
-            notes=reminder.notes(),
-            completed=reminder.isCompleted(),
-            url=reminder.URL(),
+        # Convert datetime objects to NSDate for the predicate
+        due_start_date = (
+            NSDate.dateWithTimeIntervalSince1970_(due_after.timestamp())
+            if due_after
+            else None
+        )
+        due_end_date = (
+            NSDate.dateWithTimeIntervalSince1970_(due_before.timestamp())
+            if due_before
+            else None
         )
 
-    def _save_reminder(self, ek_reminder) -> bool:
-        """
-        Internal method to save changes to a reminder.
+        # Get the EKCalendar object
+        ek_calendar = self._event_store.calendarWithIdentifier_(self.id)
 
-        Args:
-            ek_reminder: The EKReminder object to save
+        if is_completed is None:
+            # Fetch all reminders
+            predicate = self._event_store.predicateForRemindersInCalendars_(
+                [ek_calendar]
+            )
 
-        Returns:
-            bool: True if save was successful
-
-        Raises:
-            RuntimeError: If saving fails
-        """
-        error = None
-        success = self.event_store.saveReminder_commit_error_(ek_reminder, True, error)
-
-        if not success:
-            raise RuntimeError(f"Failed to update reminder: {error}")
-
-        return success
-
-    def get_all_calendars(self):
-        """Get list of all reminder calendar names"""
-        calendars = self.event_store.calendarsForEntityType_(EKEntityTypeReminder)
-        return [calendar.title() for calendar in calendars]
-
-    def get_incomplete_reminders(
-        self, calendar_names: Optional[List[str]] = None
-    ) -> Dict[str, List[Reminder]]:
-        """
-        Fetch incomplete reminders grouped by calendar
-
-        Args:
-            calendar_names: Optional list of calendar names to filter by. If None, fetches from all calendars.
-
-        Returns:
-            Dict with calendar names as keys and lists of Reminder objects as values
-        """
-        # Get all calendars or filter by provided names
-        all_calendars = self.event_store.calendarsForEntityType_(EKEntityTypeReminder)
-        if calendar_names:
-            calendars = [cal for cal in all_calendars if cal.title() in calendar_names]
+        elif is_completed:
+            # Fetch completed reminders within the date range
+            predicate = self._event_store.predicateForCompletedRemindersWithCompletionDateStarting_ending_calendars_(
+                due_start_date,
+                due_end_date,
+                [ek_calendar],
+            )
         else:
-            calendars = all_calendars
+            # Fetch incomplete reminders within the date range
+            predicate = self._event_store.predicateForIncompleteRemindersWithDueDateStarting_ending_calendars_(
+                due_start_date,
+                due_end_date,
+                [ek_calendar],
+            )
 
-        # Get end of today
-        calendar = NSCalendar.currentCalendar()
-        now = NSDate.date()
-        end_date = calendar.dateBySettingHour_minute_second_ofDate_options_(
-            23, 59, 59, now, 0
-        )
-
-        reminders_by_calendar = defaultdict(list)
+        # Fetch the reminders
         fetch_done = Event()
+        found_reminders = []
 
-        def fetch_completion(reminders):
+        def completion_handler(reminders, error=None):
+            nonlocal found_reminders
             if reminders:
-                for reminder in reminders:
-                    calendar_title = reminder.calendar().title()
-                    reminders_by_calendar[calendar_title].append(
-                        self._convert_reminder(reminder)
-                    )
+                found_reminders = reminders
             fetch_done.set()
 
-        # Get predicate for incomplete reminders
-        predicate = self.event_store.predicateForIncompleteRemindersWithDueDateStarting_ending_calendars_(
-            None,  # Starting date as None to include all past reminders
-            end_date,  # End date as end of today
-            calendars,
-        )
-
-        # Fetch reminders
-        self.event_store.fetchRemindersMatchingPredicate_completion_(
-            predicate, fetch_completion
+        self._event_store.fetchRemindersMatchingPredicate_completion_(
+            predicate, completion_handler
         )
         fetch_done.wait(timeout=60)
 
-        return dict(reminders_by_calendar)
+        for ek_reminder in found_reminders:
+            # Apply priority filter if provided - EventKit priorities: 0 (none), 1-4 (low), 5 (medium), 6-9 (high)
+            if priority == Priority.LOW and not (1 <= ek_reminder.priority() <= 4):
+                continue
+            if priority == Priority.MEDIUM and ek_reminder.priority() != 5:
+                continue
+            if priority == Priority.HIGH and not (6 <= ek_reminder.priority() <= 9):
+                continue
 
-    def pause_work(self, reminder: Reminder) -> Reminder:
-        """
-        Removes [WIP] prefix from the reminder title.
+            yield _convert_ek_reminder_to_reminder(ek_reminder)
 
-        :param reminder: Reminder object to pause
-        :return: Updated reminder object
-        """
-        # Fetch the actual EKReminder object using the identifier
-        ek_reminder = self.event_store.calendarItemWithIdentifier_(reminder.id)
+    def create_reminder(self, **kwargs) -> Reminder:
+        """Creates a new reminder in this calendar."""
+        ek_calendar = self._event_store.calendarWithIdentifier_(self.id)
 
+        # Create a new EKReminder object
+        new_reminder = EKReminder.reminderWithEventStore_(self._event_store)
+        new_reminder.setCalendar_(ek_calendar)
+
+        new_reminder.setTitle_(kwargs.get("title", ""))
+
+        if "due_date" in kwargs and kwargs["due_date"]:
+            # Create NSDateComponents from datetime
+            components = NSCalendar.currentCalendar().components_fromDate_(
+                NSCalendarUnitYear
+                | NSCalendarUnitMonth
+                | NSCalendarUnitDay
+                | NSCalendarUnitHour
+                | NSCalendarUnitMinute
+                | NSCalendarUnitSecond,  # Corrected usage
+                NSDate.dateWithTimeIntervalSince1970_(kwargs["due_date"].timestamp()),
+            )
+            new_reminder.setDueDateComponents_(components)
+
+        if "notes" in kwargs:
+            new_reminder.setNotes_(kwargs["notes"])
+
+        if "priority" in kwargs:
+            if kwargs["priority"] == Priority.NONE:
+                new_reminder.setPriority_(0)
+            elif kwargs["priority"] == Priority.HIGH:
+                new_reminder.setPriority_(1)
+            elif kwargs["priority"] == Priority.MEDIUM:
+                new_reminder.setPriority_(5)
+            elif kwargs["priority"] == Priority.LOW:
+                new_reminder.setPriority_(9)
+
+        if "is_completed" in kwargs:
+            new_reminder.setCompleted_(kwargs["is_completed"])
+
+        if "url" in kwargs:
+            new_reminder.setURL_(kwargs["url"])
+
+        # Save the new reminder
+        _save_ek_reminder(self._event_store, new_reminder)
+
+        return _convert_ek_reminder_to_reminder(new_reminder)
+
+
+class CalendarManager:
+    def __init__(self, client, event_store: EKEventStore):
+        self._client = client
+        self._event_store = event_store
+
+    def list(self) -> Generator[Calendar, None, None]:
+        """Lists all calendars."""
+        calendars = self._event_store.calendarsForEntityType_(EKEntityTypeReminder)
+        for calendar in calendars:
+            yield Calendar(
+                id=calendar.calendarIdentifier(),
+                name=calendar.title(),
+                owner="Unknown",  # Owner information is not directly available in EventKit
+                color=str(calendar.color()),
+                is_default=calendar.isImmutable(),  # Best approximation for "default"
+                _event_store=self._event_store,
+            )
+
+    def get(self, name: str) -> Calendar:
+        """Gets a calendar by its name."""
+        for calendar in self.list():
+            if calendar.name == name:
+                return calendar
+        raise ValueError(f"Calendar with name '{name}' not found.")
+
+    def get_by_id(self, id: str) -> Calendar:
+        """Gets a calendar by its ID."""
+        for calendar in self.list():
+            if calendar.id == id:
+                return calendar
+        raise ValueError(f"Calendar with ID '{id}' not found.")
+
+    def search(self, query: str) -> Generator[Calendar, None, None]:
+        """Searches for calendars matching the query in their name."""
+        for calendar in self.list():
+            if query.lower() in calendar.name.lower():
+                yield calendar
+
+    def get_default(self) -> Calendar:
+        """Gets the default calendar."""
+        default_calendar = self._event_store.defaultCalendarForNewReminders()
+        if default_calendar:
+            return Calendar(
+                id=default_calendar.calendarIdentifier(),
+                name=default_calendar.title(),
+                owner="Unknown",
+                color=str(default_calendar.color()),
+                is_default=True,
+                _event_store=self._event_store,
+            )
+        raise ValueError("No default calendar found.")
+
+
+class RemindKit:
+    def __init__(self):
+        self._event_store = _grant_permission()
+        self.calendars = CalendarManager(self, self._event_store)
+        self._is_authenticated = False
+        self._on_reminder_created_callbacks = []
+        self._on_reminder_completed_callbacks = []
+
+    def authenticate(self) -> None:
+        """Mark the client as authenticated"""
+        self._is_authenticated = True
+
+    def create_reminder(self, **kwargs) -> Reminder:
+        """Creates a new reminder (in the default calendar if not specified)."""
+        calendar_id = kwargs.pop("calendar_id", None)
+        if calendar_id:
+            calendar = self.calendars.get_by_id(calendar_id)
+        else:
+            calendar = self.calendars.get_default()
+
+        reminder = calendar.create_reminder(**kwargs)
+
+        for callback in self._on_reminder_created_callbacks:
+            callback(reminder)
+
+        return reminder
+
+    def update_reminder(self, reminder_id: str, **kwargs) -> Reminder:
+        """Updates an existing reminder with new attributes."""
+        ek_reminder = self._event_store.calendarItemWithIdentifier_(reminder_id)
         if not ek_reminder:
-            raise ValueError("Reminder not found")
+            raise ValueError(f"Reminder with ID '{reminder_id}' not found.")
 
-        current_title = ek_reminder.title()
+        if "title" in kwargs:
+            ek_reminder.setTitle_(kwargs["title"])
 
-        # Check if marked as WIP
-        if current_title.startswith("[WIP]"):
-            # Remove the [WIP] prefix and any extra spaces
-            new_title = current_title.replace("[WIP]", "").strip()
-            ek_reminder.setTitle_(new_title)
-            self._save_reminder(ek_reminder)
+        if "due_date" in kwargs and kwargs["due_date"]:
+            components = NSCalendar.currentCalendar().components_fromDate_(
+                NSCalendarUnitYear
+                | NSCalendarUnitMonth
+                | NSCalendarUnitDay
+                | NSCalendarUnitHour
+                | NSCalendarUnitMinute
+                | NSCalendarUnitSecond,
+                NSDate.dateWithTimeIntervalSince1970_(kwargs["due_date"].timestamp()),
+            )
+            ek_reminder.setDueDateComponents_(components)
 
-        # Return updated reminder
-        return self._convert_reminder(ek_reminder)
+        if "notes" in kwargs:
+            ek_reminder.setNotes_(kwargs["notes"])
 
-    def start_work(self, reminder: Reminder) -> Reminder:
-        """
-        Mark a reminder as work in progress by adding [WIP] prefix to its title
+        if "priority" in kwargs:
+            if kwargs["priority"] == Priority.NONE:
+                ek_reminder.setPriority_(0)
+            elif kwargs["priority"] == Priority.HIGH:
+                ek_reminder.setPriority_(1)
+            elif kwargs["priority"] == Priority.MEDIUM:
+                ek_reminder.setPriority_(5)
+            elif kwargs["priority"] == Priority.LOW:
+                ek_reminder.setPriority_(9)
 
-        Args:
-            reminder: Reminder object to update
+        if "is_completed" in kwargs:
+            ek_reminder.setCompleted_(kwargs["is_completed"])
 
-        Returns:
-            Updated Reminder object
-        """
-        # Fetch the actual EKReminder object using the identifier
-        ek_reminder = self.event_store.calendarItemWithIdentifier_(reminder.id)
+        if "url" in kwargs:
+            ek_reminder.setURL_(kwargs["url"])
 
+        _save_ek_reminder(self._event_store, ek_reminder)
+
+        return _convert_ek_reminder_to_reminder(ek_reminder)
+
+    def get_reminder_by_id(self, id: str) -> Reminder:
+        """Gets a reminder by its ID."""
+        ek_reminder = self._event_store.calendarItemWithIdentifier_(id)
+        if ek_reminder:
+            return _convert_ek_reminder_to_reminder(ek_reminder)
+        raise ValueError(f"Reminder with ID '{id}' not found.")
+
+    def get_reminders(
+        self,
+        due_after: Optional[datetime] = None,
+        due_before: Optional[datetime] = None,
+        is_completed: Optional[bool] = None,
+        priority: Optional[Priority] = None,
+        calendar_id: Optional[str] = None,
+    ) -> Generator[Reminder, None, None]:
+        """Gets reminders based on the provided filters."""
+        if calendar_id:
+            # Fetch reminders from a specific calendar
+            calendar = self.calendars.get_by_id(calendar_id)
+            yield from calendar.get_reminders(
+                due_after, due_before, is_completed, priority
+            )
+        else:
+            # Fetch reminders from all calendars
+            for calendar in self.calendars.list():
+                yield from calendar.get_reminders(
+                    due_after, due_before, is_completed, priority
+                )
+
+    def search_reminders(self, query: str) -> Generator[Reminder, None, None]:
+        """Searches for reminders matching the query in their title or notes."""
+        for calendar in self.calendars.list():
+            for reminder in calendar.get_reminders():
+                if query.lower() in reminder.title.lower():
+                    yield reminder
+                elif reminder.notes and query.lower() in reminder.notes.lower():
+                    yield reminder
+
+    def delete_reminder(self, reminder_id: str) -> bool:
+        """Deletes a reminder by its ID."""
+        ek_reminder = self._event_store.calendarItemWithIdentifier_(reminder_id)
         if not ek_reminder:
-            raise ValueError("Reminder not found")
+            raise ValueError(f"Reminder with ID '{reminder_id}' not found.")
 
-        current_title = ek_reminder.title()
+        error = None
+        success = self._event_store.removeReminder_commit_error_(
+            ek_reminder, True, error
+        )
 
-        # Check if already marked as WIP
-        if not current_title.startswith("[WIP]"):
-            # Update the title with [WIP] prefix
-            new_title = f"[WIP] {current_title}"
-            ek_reminder.setTitle_(new_title)
-            self._save_reminder(ek_reminder)
+        if not success:
+            raise RuntimeError(f"Failed to delete reminder: {error}")
 
-        # Return updated reminder
-        return self._convert_reminder(ek_reminder)
+        return success
 
-    def complete_work(self, reminder: Reminder) -> Reminder:
-        """
-        Complete the work by setting the complete flag to True.
-        Also removes [WIP] prefix if present.
+    def on_reminder_created(self, callback: Callable) -> None:
+        """Registers a callback to be called when a reminder is created."""
+        self._on_reminder_created_callbacks.append(callback)
 
-        Args:
-            reminder: Reminder object to complete
+    def on_reminder_completed(self, callback: Callable) -> None:
+        """Registers a callback to be called when a reminder is completed."""
+        self._on_reminder_completed_callbacks.append(callback)
 
-        Returns:
-            Updated reminder object
 
-        Raises:
-            ValueError: If reminder not found
-            RuntimeError: If saving fails
-        """
-        # Fetch the actual EKReminder object using the identifier
-        ek_reminder = self.event_store.calendarItemWithIdentifier_(reminder.id)
+# --- Helper Functions ---
 
-        if not ek_reminder:
-            raise ValueError("Reminder not found")
 
-        # Set completion status to True
-        ek_reminder.setCompleted_(True)
+def _grant_permission() -> EKEventStore:
+    """Grants permission to access reminders and returns the EKEventStore."""
+    event_store = EKEventStore.alloc().init()
+    done = Event()
+    result = {}
 
-        # Remove [WIP] prefix if present
-        current_title = ek_reminder.title()
-        if current_title.startswith("[WIP]"):
-            new_title = current_title.replace("[WIP]", "").strip()
-            ek_reminder.setTitle_(new_title)
+    def completion_handler(granted: bool, error: objc.objc_object) -> None:
+        result["granted"] = granted
+        result["error"] = error
+        done.set()
 
-        # Save changes
-        self._save_reminder(ek_reminder)
+    event_store.requestFullAccessToRemindersWithCompletion_(completion_handler)
+    done.wait(timeout=60)
+    if not result.get("granted"):
+        raise PermissionError("No access to reminders")
 
-        # Return updated reminder
-        return self._convert_reminder(ek_reminder)
+    return event_store
+
+
+def _convert_ek_reminder_to_reminder(ek_reminder) -> Reminder:
+    """Converts an EKReminder object to a Reminder object."""
+    due_date = None
+    if ek_reminder.dueDateComponents():
+        ns_date = ek_reminder.dueDateComponents().date()
+        if ns_date:
+            due_date = datetime.fromtimestamp(ns_date.timeIntervalSince1970())
+
+    return Reminder(
+        id=ek_reminder.calendarItemIdentifier(),
+        title=ek_reminder.title(),
+        due_date=due_date,
+        notes=ek_reminder.notes(),
+        completed=ek_reminder.isCompleted(),
+        url=str(ek_reminder.URL()) if ek_reminder.URL() else None,
+    )
+
+
+def _save_ek_reminder(event_store: EKEventStore, ek_reminder) -> bool:
+    """Saves changes to an EKReminder."""
+    error = None
+    success = event_store.saveReminder_commit_error_(ek_reminder, True, error)
+
+    if not success:
+        raise RuntimeError(f"Failed to update reminder: {error}")
+
+    return success
