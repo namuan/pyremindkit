@@ -36,6 +36,12 @@ class Reminder(NamedTuple):
     notes: Optional[str]
     completed: bool
     url: Optional[str]
+    # Fixed: Added missing fields
+    priority: int
+    list_id: str
+    created_date: Optional[datetime]
+    modified_date: Optional[datetime]
+    flagged: bool
 
 
 @dataclass
@@ -120,7 +126,15 @@ class Calendar:
 
     def create_reminder(self, **kwargs) -> Reminder:
         """Creates a new reminder in this calendar."""
-        ek_calendar = self._event_store.calendarWithIdentifier_(self.id)
+        # Fixed: Support list_id parameter for cross-calendar creation
+        if "list_id" in kwargs:
+            target_calendar_id = kwargs.pop("list_id")
+            ek_calendar = self._event_store.calendarWithIdentifier_(target_calendar_id)
+            if not ek_calendar:
+                # Fall back to current calendar if target not found
+                ek_calendar = self._event_store.calendarWithIdentifier_(self.id)
+        else:
+            ek_calendar = self._event_store.calendarWithIdentifier_(self.id)
 
         # Create a new EKReminder object
         new_reminder = EKReminder.reminderWithEventStore_(self._event_store)
@@ -145,14 +159,20 @@ class Calendar:
             new_reminder.setNotes_(kwargs["notes"])
 
         if "priority" in kwargs:
-            if kwargs["priority"] == Priority.NONE:
-                new_reminder.setPriority_(0)
-            elif kwargs["priority"] == Priority.HIGH:
-                new_reminder.setPriority_(1)
-            elif kwargs["priority"] == Priority.MEDIUM:
-                new_reminder.setPriority_(5)
-            elif kwargs["priority"] == Priority.LOW:
-                new_reminder.setPriority_(9)
+            priority_val = kwargs["priority"]
+            if isinstance(priority_val, int):
+                # Direct integer priority (0-9)
+                new_reminder.setPriority_(priority_val)
+            else:
+                # Fixed: Correct priority mapping for enum values
+                if priority_val == Priority.NONE:
+                    new_reminder.setPriority_(0)
+                elif priority_val == Priority.LOW:
+                    new_reminder.setPriority_(1)      # Fixed: Was 9
+                elif priority_val == Priority.MEDIUM:
+                    new_reminder.setPriority_(5)      # Correct
+                elif priority_val == Priority.HIGH:
+                    new_reminder.setPriority_(9)      # Fixed: Was 1
 
         if "is_completed" in kwargs:
             new_reminder.setCompleted_(kwargs["is_completed"])
@@ -229,7 +249,8 @@ class RemindKit:
 
     def create_reminder(self, **kwargs) -> Reminder:
         """Creates a new reminder (in the default calendar if not specified)."""
-        calendar_id = kwargs.pop("calendar_id", None)
+        # Fixed: Support both list_id and calendar_id parameters
+        calendar_id = kwargs.pop("calendar_id", None) or kwargs.pop("list_id", None)
         if calendar_id:
             calendar = self.calendars.get_by_id(calendar_id)
         else:
@@ -267,14 +288,20 @@ class RemindKit:
             ek_reminder.setNotes_(kwargs["notes"])
 
         if "priority" in kwargs:
-            if kwargs["priority"] == Priority.NONE:
-                ek_reminder.setPriority_(0)
-            elif kwargs["priority"] == Priority.HIGH:
-                ek_reminder.setPriority_(1)
-            elif kwargs["priority"] == Priority.MEDIUM:
-                ek_reminder.setPriority_(5)
-            elif kwargs["priority"] == Priority.LOW:
-                ek_reminder.setPriority_(9)
+            priority_val = kwargs["priority"]
+            if isinstance(priority_val, int):
+                # Direct integer priority (0-9)
+                ek_reminder.setPriority_(priority_val)
+            else:
+                # Fixed: Correct priority mapping for enum values
+                if priority_val == Priority.NONE:
+                    ek_reminder.setPriority_(0)
+                elif priority_val == Priority.LOW:
+                    ek_reminder.setPriority_(1)      # Fixed: Was 9
+                elif priority_val == Priority.MEDIUM:
+                    ek_reminder.setPriority_(5)      # Correct
+                elif priority_val == Priority.HIGH:
+                    ek_reminder.setPriority_(9)      # Fixed: Was 1
 
         if "is_completed" in kwargs:
             ek_reminder.setCompleted_(kwargs["is_completed"])
@@ -379,6 +406,18 @@ def _convert_ek_reminder_to_reminder(ek_reminder) -> Reminder:
         if ns_date:
             due_date = datetime.fromtimestamp(ns_date.timeIntervalSince1970())
 
+    # Fixed: Extract created and modified dates
+    created_date = None
+    if ek_reminder.creationDate():
+        created_date = datetime.fromtimestamp(ek_reminder.creationDate().timeIntervalSince1970())
+    
+    modified_date = None
+    if ek_reminder.lastModifiedDate():
+        modified_date = datetime.fromtimestamp(ek_reminder.lastModifiedDate().timeIntervalSince1970())
+
+    # Extract priority value
+    raw_priority = ek_reminder.priority() if hasattr(ek_reminder, 'priority') else 0
+    
     return Reminder(
         id=ek_reminder.calendarItemIdentifier(),
         title=ek_reminder.title(),
@@ -386,6 +425,12 @@ def _convert_ek_reminder_to_reminder(ek_reminder) -> Reminder:
         notes=ek_reminder.notes(),
         completed=ek_reminder.isCompleted(),
         url=str(ek_reminder.URL()) if ek_reminder.URL() else None,
+        # Fixed: Added missing fields
+        priority=raw_priority,
+        list_id=ek_reminder.calendar().calendarIdentifier(),
+        created_date=created_date,
+        modified_date=modified_date,
+        flagged=ek_reminder.flagged() if hasattr(ek_reminder, 'flagged') else False,
     )
 
 
