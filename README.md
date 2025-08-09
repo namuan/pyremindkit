@@ -19,7 +19,8 @@ python3 -m pip install git+https://github.com/namuan/pyremindkit
 ```python
 from datetime import datetime
 
-from pyremindkit import RemindKit, Priority
+from pyremindkit import Priority
+from pyremindkit import RemindKit
 
 remind = RemindKit()
 
@@ -38,7 +39,7 @@ new_reminder = remind.create_reminder(
     due_date=datetime.now(),
     notes="Get some oat milk too!",
     priority=Priority.HIGH,
-    calendar_id=default_calendar.id
+    calendar_id=default_calendar.id,
 )
 print(f"Created reminder: {new_reminder.title} (ID: {new_reminder.id})")
 
@@ -46,7 +47,7 @@ print(f"Created reminder: {new_reminder.title} (ID: {new_reminder.id})")
 updated_reminder = remind.update_reminder(
     new_reminder.id,
     title="Buy Almond Milk Instead",
-    notes="Changed my mind, get almond milk!"
+    notes="Changed my mind, get almond milk!",
 )
 print(f"Updated reminder title to: {updated_reminder.title}")
 print(f"Updated reminder notes to: {updated_reminder.notes}")
@@ -55,6 +56,11 @@ print(f"Updated reminder notes to: {updated_reminder.notes}")
 retrieved_reminder = remind.get_reminder_by_id(new_reminder.id)
 print(f"Retrieved reminder: {retrieved_reminder.title}")
 
+# Check for the next upcoming reminder
+next_reminder = remind.get_next_reminder()
+print(f"Next upcoming reminder: {next_reminder.title if next_reminder else 'None'}")
+
+# Delete the reminder
 remind.delete_reminder(new_reminder.id)
 print(f"Deleted reminder: {new_reminder.title}")
 

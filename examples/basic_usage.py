@@ -37,6 +37,11 @@ print(f"Updated reminder notes to: {updated_reminder.notes}")
 retrieved_reminder = remind.get_reminder_by_id(new_reminder.id)
 print(f"Retrieved reminder: {retrieved_reminder.title}")
 
+# Check for the next upcoming reminder
+next_reminder = remind.get_next_reminder()
+print(f"Next upcoming reminder: {next_reminder.title if next_reminder else 'None'}")
+
+# Delete the reminder
 remind.delete_reminder(new_reminder.id)
 print(f"Deleted reminder: {new_reminder.title}")
 

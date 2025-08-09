@@ -293,6 +293,16 @@ class RemindKit:
             return _convert_ek_reminder_to_reminder(ek_reminder)
         raise ValueError(f"Reminder with ID '{id}' not found.")
 
+    def get_next_reminder(self) -> Optional[Reminder]:
+        """Returns the next upcoming reminder."""
+        current_time = datetime.now()
+        all_reminders = list(
+            self.get_reminders(is_completed=False, due_after=current_time)
+        )
+        upcoming_reminders = [r for r in all_reminders if r.due_date]
+        upcoming_reminders.sort(key=lambda x: x.due_date)
+        return upcoming_reminders[0] if upcoming_reminders else None
+
     def get_reminders(
         self,
         due_after: Optional[datetime] = None,
