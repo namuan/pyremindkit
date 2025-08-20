@@ -17,7 +17,7 @@ python3 -m pip install git+https://github.com/namuan/pyremindkit
 ### Basic Usage
 
 ```python
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from pyremindkit import Priority
 from pyremindkit import RemindKit
@@ -42,6 +42,13 @@ new_reminder = remind.create_reminder(
     calendar_id=default_calendar.id,
 )
 print(f"Created reminder: {new_reminder.title} (ID: {new_reminder.id})")
+
+# Move the reminder's due date 2 hours into the future
+moved_reminder = remind.update_reminder(
+    new_reminder.id,
+    due_date=datetime.now() + timedelta(hours=2),
+)
+print(f"Moved reminder due date to: {moved_reminder.due_date}")
 
 # Update the reminder's title
 updated_reminder = remind.update_reminder(

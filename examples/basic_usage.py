@@ -1,4 +1,5 @@
 from datetime import datetime
+from datetime import timedelta
 
 from pyremindkit import Priority
 from pyremindkit import RemindKit
@@ -24,6 +25,16 @@ new_reminder = remind.create_reminder(
 )
 print(f"Created reminder: {new_reminder.title} (ID: {new_reminder.id})")
 
+print("Press Enter to continue...")
+input()
+
+# Move the reminder's due date 2 hours into the future
+moved_reminder = remind.update_reminder(
+    new_reminder.id,
+    due_date=datetime.now() + timedelta(hours=2),
+)
+print(f"Moved reminder due date to: {moved_reminder.due_date}")
+
 # Update the reminder's title
 updated_reminder = remind.update_reminder(
     new_reminder.id,
@@ -32,6 +43,9 @@ updated_reminder = remind.update_reminder(
 )
 print(f"Updated reminder title to: {updated_reminder.title}")
 print(f"Updated reminder notes to: {updated_reminder.notes}")
+
+print("Press Enter to continue...")
+input()
 
 # Get a reminder by ID
 retrieved_reminder = remind.get_reminder_by_id(new_reminder.id)
