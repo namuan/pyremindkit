@@ -63,7 +63,7 @@ print("\n✓ Search calendars (searching for first word of default calendar):")
 # Extract search term from calendar name
 try:
     search_term = default_calendar.name.split()[0]
-except (AttributeError, IndexError):
+except IndexError:
     search_term = "Reminders"
 for cal in remind.calendars.search(search_term):
     print(f"  - {cal.name}")
@@ -259,10 +259,9 @@ for reminder_id in created_reminder_ids:
 # Verify cleanup
 print("\n✓ Verifying all demo reminders are deleted...")
 remaining = []
-# Only check incomplete reminders for efficiency
-for r in remind.get_reminders(is_completed=False):
-    if r.title.startswith("[Demo]"):
-        remaining.append(r.title)
+# Use search to efficiently find any remaining demo reminders
+for r in remind.search_reminders("[Demo]"):
+    remaining.append(r.title)
 
 if remaining:
     print(f"⚠️  Warning: {len(remaining)} demo reminders still exist:")
