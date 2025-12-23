@@ -26,9 +26,7 @@ def prompt(message):
 
 def truncate_id(reminder_id, max_length=8):
     """Truncate a reminder ID for display purposes."""
-    if len(reminder_id) > max_length:
-        return reminder_id[:max_length]
-    return reminder_id
+    return reminder_id[:max_length]
 
 
 # Initialize RemindKit
@@ -63,9 +61,9 @@ print(f"✓ Retrieved calendar by ID: {calendar_by_id.name}")
 # Feature: Search calendars
 print("\n✓ Search calendars (searching for first word of default calendar):")
 # Extract search term from calendar name
-if default_calendar.name and len(default_calendar.name.split()) > 0:
+try:
     search_term = default_calendar.name.split()[0]
-else:
+except (AttributeError, IndexError):
     search_term = "Reminders"
 for cal in remind.calendars.search(search_term):
     print(f"  - {cal.name}")
@@ -261,7 +259,8 @@ for reminder_id in created_reminder_ids:
 # Verify cleanup
 print("\n✓ Verifying all demo reminders are deleted...")
 remaining = []
-for r in remind.get_reminders():
+# Only check incomplete reminders for efficiency
+for r in remind.get_reminders(is_completed=False):
     if r.title.startswith("[Demo]"):
         remaining.append(r.title)
 
