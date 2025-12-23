@@ -91,7 +91,9 @@ print(f"  - Notes: {reminder1.notes}")
 print(f"  - URL: {reminder1.url}")
 print(f"  - Priority: {reminder1.priority}")
 
-prompt("Check Apple Reminders - you should see '[Demo] Buy Groceries' with HIGH priority")
+prompt(
+    "Check Apple Reminders - you should see '[Demo] Buy Groceries' with HIGH priority"
+)
 
 # Feature: Create reminders with different priority levels
 reminder2 = remind.create_reminder(
@@ -121,7 +123,9 @@ reminder4 = remind.create_reminder(
 created_reminder_ids.append(reminder4.id)
 print(f"✓ Created NONE priority reminder: {reminder4.title}")
 
-prompt("Check Apple Reminders - you should see all 4 demo reminders with different priorities")
+prompt(
+    "Check Apple Reminders - you should see all 4 demo reminders with different priorities"
+)
 
 # =============================================================================
 # REMINDER RETRIEVAL AND FILTERING FEATURES
@@ -140,7 +144,9 @@ for r in remind.get_reminders(due_after=datetime.now(), is_completed=False):
 
 # Feature: List reminders with due_before filter
 print("\n✓ Reminders due before 2 days from now:")
-for r in remind.get_reminders(due_before=datetime.now() + timedelta(days=2), is_completed=False):
+for r in remind.get_reminders(
+    due_before=datetime.now() + timedelta(days=2), is_completed=False
+):
     if r.title.startswith("[Demo]"):
         print(f"  - {r.title} (Due: {r.due_date})")
 
@@ -182,7 +188,9 @@ updated1 = remind.update_reminder(
 print(f"✓ Updated title: {updated1.title}")
 print(f"  Updated notes: {updated1.notes}")
 
-prompt("Check Apple Reminders - '[Demo] Buy Groceries' should now be '[Demo] Buy Organic Groceries'")
+prompt(
+    "Check Apple Reminders - '[Demo] Buy Groceries' should now be '[Demo] Buy Organic Groceries'"
+)
 
 # Feature: Update reminder due date
 updated2 = remind.update_reminder(
@@ -212,7 +220,9 @@ updated5 = remind.update_reminder(
 )
 print(f"\n✓ Marked as completed: {reminder4.title}")
 
-prompt("Check Apple Reminders - verify all updates (title, due date, priority, URL, completion)")
+prompt(
+    "Check Apple Reminders - verify all updates (title, due date, priority, URL, completion)"
+)
 
 # Feature: List completed reminders
 print("\n✓ Completed demo reminders:")
@@ -225,9 +235,11 @@ for r in remind.get_reminders(is_completed=True):
 # =============================================================================
 print("\n🔔 EVENT CALLBACK FEATURES\n")
 
+
 # Feature: Register callback for reminder creation
 def on_created(reminder):
     print(f"  → Callback triggered! Created: {reminder.title}")
+
 
 remind.on_reminder_created(on_created)
 print("✓ Registered on_reminder_created callback")
