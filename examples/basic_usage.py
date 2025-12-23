@@ -225,11 +225,9 @@ for r in remind.get_reminders(is_completed=True):
 # =============================================================================
 print("\n🔔 EVENT CALLBACK FEATURES\n")
 
-
 # Feature: Register callback for reminder creation
 def on_created(reminder):
     print(f"  → Callback triggered! Created: {reminder.title}")
-
 
 remind.on_reminder_created(on_created)
 print("✓ Registered on_reminder_created callback")
@@ -264,7 +262,7 @@ for r in remind.search_reminders("[Demo]"):
     remaining.append(r.title)
 
 if remaining:
-    print(f"⚠️  Warning: {len(remaining)} demo reminders still exist:")
+    print(f"⚠️ Warning: {len(remaining)} demo reminders still exist:")
     for title in remaining:
         print(f"  - {title}")
 else:
