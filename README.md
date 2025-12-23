@@ -4,7 +4,46 @@ A Python package that a simple wrapper over Apple Reminders API
 
 ## Features
 
-WIP
+### Reminder Management
+- **Create reminders** with customizable attributes (title, due date, notes, priority, URL)
+- **Update reminders** - modify title, due date, notes, priority, completion status, and URLs
+- **Delete reminders** by ID
+- **Get reminder by ID** - retrieve specific reminders
+- **Get next upcoming reminder** - find the next scheduled reminder
+- **List reminders** with flexible filtering:
+  - Filter by due date range (due_after, due_before)
+  - Filter by completion status (completed/incomplete)
+  - Filter by priority level
+  - Filter by calendar/list
+- **Search reminders** - find reminders by text in title or notes
+
+### Calendar Management
+- **List all calendars** - view all available reminder lists
+- **Get calendar by name** - retrieve calendar by its name
+- **Get calendar by ID** - retrieve calendar by its identifier
+- **Search calendars** - find calendars matching a query
+- **Get default calendar** - access the default reminder list
+- **Create reminders in specific calendars** - target specific lists when creating reminders
+
+### Priority Support
+- Four semantic priority levels: NONE, LOW, MEDIUM, HIGH
+- Underlying support for fine-grained priority values (0-9)
+- Filter reminders by priority
+- Set priority when creating or updating reminders
+
+### Event Callbacks
+- **on_reminder_created** - register callbacks triggered when reminders are created
+
+### Reminder Attributes
+- Title
+- Due date with time
+- Notes
+- Priority (0-9 or enum values)
+- Completion status
+- URLs
+- Flagged status
+- Created and modified timestamps
+- Associated calendar/list ID
 
 ## Installation
 

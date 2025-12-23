@@ -19,6 +19,7 @@ from Foundation import NSCalendarUnitMonth
 from Foundation import NSCalendarUnitSecond
 from Foundation import NSCalendarUnitYear
 from Foundation import NSDate
+from Foundation import NSURL
 
 
 # --- Data Classes ---
@@ -168,17 +169,17 @@ class Calendar:
                 if priority_val == Priority.NONE:
                     new_reminder.setPriority_(0)
                 elif priority_val == Priority.LOW:
-                    new_reminder.setPriority_(1)      # Fixed: Was 9
+                    new_reminder.setPriority_(1)  # Fixed: Was 9
                 elif priority_val == Priority.MEDIUM:
-                    new_reminder.setPriority_(5)      # Correct
+                    new_reminder.setPriority_(5)  # Correct
                 elif priority_val == Priority.HIGH:
-                    new_reminder.setPriority_(9)      # Fixed: Was 1
+                    new_reminder.setPriority_(9)  # Fixed: Was 1
 
         if "is_completed" in kwargs:
             new_reminder.setCompleted_(kwargs["is_completed"])
 
         if "url" in kwargs:
-            new_reminder.setURL_(kwargs["url"])
+            new_reminder.setURL_(_coerce_nsurl(kwargs["url"]))
 
         # Save the new reminder
         _save_ek_reminder(self._event_store, new_reminder)
@@ -297,17 +298,17 @@ class RemindKit:
                 if priority_val == Priority.NONE:
                     ek_reminder.setPriority_(0)
                 elif priority_val == Priority.LOW:
-                    ek_reminder.setPriority_(1)      # Fixed: Was 9
+                    ek_reminder.setPriority_(1)  # Fixed: Was 9
                 elif priority_val == Priority.MEDIUM:
-                    ek_reminder.setPriority_(5)      # Correct
+                    ek_reminder.setPriority_(5)  # Correct
                 elif priority_val == Priority.HIGH:
-                    ek_reminder.setPriority_(9)      # Fixed: Was 1
+                    ek_reminder.setPriority_(9)  # Fixed: Was 1
 
         if "is_completed" in kwargs:
             ek_reminder.setCompleted_(kwargs["is_completed"])
 
         if "url" in kwargs:
-            ek_reminder.setURL_(kwargs["url"])
+            ek_reminder.setURL_(_coerce_nsurl(kwargs["url"]))
 
         _save_ek_reminder(self._event_store, ek_reminder)
 
@@ -419,29 +420,50 @@ def _convert_ek_reminder_to_reminder(ek_reminder) -> Reminder:
     # Fixed: Extract created and modified dates
     created_date = None
     if ek_reminder.creationDate():
-        created_date = datetime.fromtimestamp(ek_reminder.creationDate().timeIntervalSince1970())
-    
+        created_date = datetime.fromtimestamp(
+            ek_reminder.creationDate().timeIntervalSince1970()
+        )
+
     modified_date = None
     if ek_reminder.lastModifiedDate():
-        modified_date = datetime.fromtimestamp(ek_reminder.lastModifiedDate().timeIntervalSince1970())
+        modified_date = datetime.fromtimestamp(
+            ek_reminder.lastModifiedDate().timeIntervalSince1970()
+        )
 
     # Extract priority value
-    raw_priority = ek_reminder.priority() if hasattr(ek_reminder, 'priority') else 0
-    
+    raw_priority = ek_reminder.priority() if hasattr(ek_reminder, "priority") else 0
+
     return Reminder(
         id=ek_reminder.calendarItemIdentifier(),
         title=ek_reminder.title(),
         due_date=due_date,
         notes=ek_reminder.notes(),
         completed=ek_reminder.isCompleted(),
-        url=str(ek_reminder.URL()) if ek_reminder.URL() else None,
+        url=str(ek_reminder.URL().absoluteString()) if ek_reminder.URL() else None,
         # Fixed: Added missing fields
         priority=raw_priority,
         list_id=ek_reminder.calendar().calendarIdentifier(),
         created_date=created_date,
         modified_date=modified_date,
-        flagged=ek_reminder.flagged() if hasattr(ek_reminder, 'flagged') else False,
+        flagged=ek_reminder.flagged() if hasattr(ek_reminder, "flagged") else False,
     )
+
+
+def _coerce_nsurl(value) -> Optional[NSURL]:
+    if value is None:
+        return None
+    if isinstance(value, NSURL):
+        return value
+    if isinstance(value, bytes):
+        value = value.decode("utf-8")
+    if isinstance(value, str):
+        if value == "":
+            return None
+        url = NSURL.URLWithString_(value)
+        if url is None:
+            raise ValueError(f"Invalid URL: {value!r}")
+        return url
+    raise TypeError(f"url must be str | NSURL | None, got {type(value).__name__}")
 
 
 def _save_ek_reminder(event_store: EKEventStore, ek_reminder) -> bool:
