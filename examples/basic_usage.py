@@ -24,6 +24,13 @@ def prompt(message):
     input("Press Enter to continue...")
 
 
+def truncate_id(reminder_id, max_length=8):
+    """Truncate a reminder ID for display purposes."""
+    if len(reminder_id) > max_length:
+        return reminder_id[:max_length]
+    return reminder_id
+
+
 # Initialize RemindKit
 remind = RemindKit()
 print("\n🚀 PyRemindKit Feature Demonstration\n")
@@ -40,7 +47,7 @@ print(f"✓ Default calendar: {default_calendar.name}")
 # Feature: List all calendars
 print("\n✓ All available calendars:")
 for cal in remind.calendars.list():
-    print(f"  - {cal.name} (ID: {cal.id[:8]}...)")
+    print(f"  - {cal.name} (ID: {truncate_id(cal.id)}...)")
 
 # Feature: Get calendar by name
 try:
@@ -55,7 +62,11 @@ print(f"✓ Retrieved calendar by ID: {calendar_by_id.name}")
 
 # Feature: Search calendars
 print("\n✓ Search calendars (searching for first word of default calendar):")
-search_term = default_calendar.name.split()[0] if default_calendar.name and len(default_calendar.name.split()) > 0 else "Reminders"
+# Extract search term from calendar name
+if default_calendar.name and len(default_calendar.name.split()) > 0:
+    search_term = default_calendar.name.split()[0]
+else:
+    search_term = "Reminders"
 for cal in remind.calendars.search(search_term):
     print(f"  - {cal.name}")
 
@@ -243,11 +254,9 @@ print("\n🧹 CLEANUP - Deleting all demo reminders\n")
 for reminder_id in created_reminder_ids:
     try:
         remind.delete_reminder(reminder_id)
-        short_id = reminder_id[:min(8, len(reminder_id))] if len(reminder_id) > 8 else reminder_id
-        print(f"✓ Deleted reminder (ID: {short_id}...)")
+        print(f"✓ Deleted reminder (ID: {truncate_id(reminder_id)}...)")
     except Exception as e:
-        short_id = reminder_id[:min(8, len(reminder_id))] if len(reminder_id) > 8 else reminder_id
-        print(f"✗ Could not delete reminder {short_id}...: {e}")
+        print(f"✗ Could not delete reminder {truncate_id(reminder_id)}...: {e}")
 
 # Verify cleanup
 print("\n✓ Verifying all demo reminders are deleted...")
