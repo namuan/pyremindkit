@@ -26,13 +26,13 @@ A Python package that a simple wrapper over Apple Reminders API
 - **Create reminders in specific calendars** - target specific lists when creating reminders
 
 ### Priority Support
-- Four priority levels: NONE, LOW, MEDIUM, HIGH
-- Filter and sort reminders by priority
+- Four semantic priority levels: NONE, LOW, MEDIUM, HIGH
+- Underlying support for fine-grained priority values (0-9)
+- Filter reminders by priority
 - Set priority when creating or updating reminders
 
 ### Event Callbacks
 - **on_reminder_created** - register callbacks triggered when reminders are created
-- **on_reminder_completed** - register callbacks triggered when reminders are marked complete
 
 ### Reminder Attributes
 - Title
