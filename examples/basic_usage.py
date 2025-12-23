@@ -251,7 +251,7 @@ for reminder_id in created_reminder_ids:
     try:
         remind.delete_reminder(reminder_id)
         print(f"✓ Deleted reminder (ID: {truncate_id(reminder_id)}...)")
-    except Exception as e:
+    except (ValueError, RuntimeError) as e:
         print(f"✗ Could not delete reminder {truncate_id(reminder_id)}...: {e}")
 
 # Verify cleanup
